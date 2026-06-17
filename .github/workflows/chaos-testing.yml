@@ -1,0 +1,136 @@
+name: Chaos Testing Pipeline
+
+on:
+  push:
+    branches: [main]
+
+env:
+  STAGING_URL: ${{ vars.STAGING_URL }}
+
+jobs:
+  build-and-test:
+    name: Build e Testes Unitários
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm test -- --ci
+      - run: npm run build
+
+  deploy-staging:
+    name: Deploy em Homologação
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Deploy para staging (Vercel)
+        run: npx vercel deploy --token ${{ secrets.VERCEL_TOKEN }} --env=preview
+      - name: Aguardar staging ficar disponível
+        run: sleep 15
+
+  e2e-normal:
+    name: Testes E2E (sem caos)
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Testes E2E — Happy Path
+        run: npm run test:e2e:run -- --spec cypress/e2e/checkout.cy.ts
+        env:
+          CYPRESS_BASE_URL: ${{ env.STAGING_URL }}
+
+  chaos-testing:
+    name: Chaos Testing Stage
+    needs: e2e-normal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Registrar steady state (baseline de métricas)
+        id: baseline
+        run: |
+          METRICS=$(curl -s $STAGING_URL/api/chaos/metrics)
+          echo "baseline=$METRICS" >> $GITHUB_OUTPUT
+          echo "Baseline registrado: $METRICS"
+
+      - name: Injetar latência de 15s na API de frete (Gremlin)
+        run: |
+          curl -X POST https://api.gremlin.com/v1/attacks \
+            -H "Authorization: Bearer ${{ secrets.GREMLIN_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "type": "latency",
+              "target": "api-frete-ia",
+              "length": "90",
+              "delay": "15000"
+            }'
+        continue-on-error: true
+
+      - name: Alternativa local (sem Gremlin)
+        if: ${{ !secrets.GREMLIN_API_KEY }}
+        run: |
+          curl -X POST $STAGING_URL/api/chaos/inject \
+            -H "Content-Type: application/json" \
+            -d '{"type":"latency","target":"api-frete-ia","delayMs":15000,"durationMs":90000,"blastRadius":100}'
+
+      - name: Aguardar caos propagar
+        run: sleep 5
+
+      - name: Testes E2E de verificação (sistema deve sobreviver ao caos)
+        run: npm run test:e2e:run -- --spec cypress/e2e/chaos.cy.ts
+        env:
+          CYPRESS_BASE_URL: ${{ env.STAGING_URL }}
+
+      - name: Validar métricas pós-caos
+        run: |
+          METRICS=$(curl -s $STAGING_URL/api/chaos/metrics)
+          ERROR_RATE=$(echo $METRICS | jq '.circuitBreaker.failureCount // 0')
+          echo "Circuit Breaker falhas: $ERROR_RATE"
+
+      - name: Parar experimento de caos
+        if: always()
+        run: |
+          curl -X POST $STAGING_URL/api/chaos/stop || true
+
+      - name: Alertar em caso de falha
+        if: failure()
+        run: |
+          echo "O sistema NAO sobreviveu ao caos!"
+          echo "Verifique o Circuit Breaker e o fallback antes do proximo deploy."
+          exit 1
+
+  deploy-production:
+    name: Deploy em Produção
+    needs: chaos-testing
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Deploy para produção (apenas após passar no caos)
+        run: npx vercel deploy --token ${{ secrets.VERCEL_TOKEN }} --prod

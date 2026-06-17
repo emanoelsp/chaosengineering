@@ -1,13 +1,15 @@
-import { collection, getDocs, doc, getDoc, updateDoc, query, where, orderBy } from 'firebase/firestore'
+import { collection, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase/client'
 import type { Product } from '@/schemas/product'
 
 const COLLECTION = 'products'
 
 export async function listProducts(): Promise<Product[]> {
-  const q = query(collection(db, COLLECTION), where('estoque', '>', 0), orderBy('nome'))
-  const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Product))
+  const snap = await getDocs(collection(db, COLLECTION))
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as Product))
+    .filter((p) => p.estoque > 0)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
 export async function getProduct(id: string): Promise<Product | null> {

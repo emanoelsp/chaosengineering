@@ -11,7 +11,7 @@ export const EnderecoSchema = z.object({
 })
 
 export const CartItemSchema = z.object({
-  productId: z.string().uuid(),
+  productId: z.string().min(1),
   quantidade: z.number().int().positive().max(99),
 })
 

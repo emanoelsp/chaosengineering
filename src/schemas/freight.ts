@@ -9,7 +9,7 @@ export const FreightInputSchema = z.object({
   itens: z
     .array(
       z.object({
-        id: z.string().uuid(),
+        id: z.string().min(1),
         quantidade: z.number().int().positive(),
       })
     )

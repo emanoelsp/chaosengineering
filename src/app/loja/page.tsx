@@ -1,5 +1,7 @@
 import { listProducts } from '@/services/products'
 import type { Product } from '@/schemas/product'
+import { AddToCartButton } from '@/components/features/loja/add-to-cart-button'
+import { CartSummaryLink } from '@/components/features/loja/cart-summary-link'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,33 +23,36 @@ export default async function LojaPage() {
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center space-y-2">
           <p className="font-semibold text-destructive">Não foi possível carregar os produtos.</p>
           <p className="text-sm text-muted-foreground">
-            Verifique se o seed foi executado e se o índice composto do Firestore está criado
-            (campo <code className="font-mono text-xs bg-muted px-1 rounded">estoque ASC + nome ASC</code> na coleção <code className="font-mono text-xs bg-muted px-1 rounded">products</code>).
+            Verifique se o seed foi executado e se o banco está acessível.
           </p>
         </div>
       ) : products.length === 0 ? (
-        <p className="text-center text-muted-foreground">Nenhum produto disponível. Rode <code className="font-mono text-xs bg-muted px-1 rounded">npm run seed</code> para popular o banco.</p>
+        <p className="text-center text-muted-foreground">
+          Nenhum produto disponível. Rode{' '}
+          <code className="font-mono text-xs bg-muted px-1 rounded">npm run seed</code> para popular o banco.
+        </p>
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {products.map((product) => (
-            <div key={product.id} className="rounded-lg border bg-card p-4 shadow-sm">
+            <div key={product.id} className="rounded-lg border bg-card p-4 shadow-sm flex flex-col">
               <div className="mb-3 aspect-square overflow-hidden rounded-md bg-muted">
-                {/* ProductCard component goes here */}
                 <div className="flex h-full items-center justify-center text-4xl">🦫</div>
               </div>
               <h2 className="font-semibold">{product.nome}</h2>
-              <p className="text-sm text-muted-foreground">{product.descricao}</p>
+              <p className="mt-1 flex-1 text-sm text-muted-foreground">{product.descricao}</p>
               <div className="mt-3 flex items-center justify-between">
                 <span className="text-lg font-bold">
                   {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.preco)}
                 </span>
                 <span className="text-xs text-muted-foreground">{product.estoque} em estoque</span>
               </div>
-              {/* AddToCartButton client component goes here */}
+              <AddToCartButton product={product} />
             </div>
           ))}
         </div>
       )}
+
+      <CartSummaryLink />
     </div>
   )
 }

@@ -1,17 +1,32 @@
 import { listProducts } from '@/services/products'
+import type { Product } from '@/schemas/product'
 
 export const dynamic = 'force-dynamic'
 
 export default async function LojaPage() {
-  const products = await listProducts()
+  let products: Product[] = []
+  let fetchError = false
+  try {
+    products = await listProducts()
+  } catch {
+    fetchError = true
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="mb-2 text-3xl font-bold">Capivaras de Pelúcia</h1>
       <p className="mb-8 text-muted-foreground">A loja que vai ser quebrada de propósito.</p>
 
-      {products.length === 0 ? (
-        <p className="text-center text-muted-foreground">Nenhum produto disponível.</p>
+      {fetchError ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center space-y-2">
+          <p className="font-semibold text-destructive">Não foi possível carregar os produtos.</p>
+          <p className="text-sm text-muted-foreground">
+            Verifique se o seed foi executado e se o índice composto do Firestore está criado
+            (campo <code className="font-mono text-xs bg-muted px-1 rounded">estoque ASC + nome ASC</code> na coleção <code className="font-mono text-xs bg-muted px-1 rounded">products</code>).
+          </p>
+        </div>
+      ) : products.length === 0 ? (
+        <p className="text-center text-muted-foreground">Nenhum produto disponível. Rode <code className="font-mono text-xs bg-muted px-1 rounded">npm run seed</code> para popular o banco.</p>
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {products.map((product) => (
